@@ -9,13 +9,23 @@
  * Functional tests for the commerce customer UI module.
  */
 class CommerceCustomerUITest extends CommerceBaseTestCase {
+
+  /**
+   * @var stdClass
+   */
+  protected $storeAdmin;
+  /**
+   * @var stdClass
+   */
+  protected $storeCustomer;
+
   /**
    * Implementation of getInfo().
    */
   public static function getInfo() {
     return array(
       'name' => 'Customer user interface',
-      'description' => 'Test creating, editing, deleting cusomer profiles and how they interact with other components, like orders.',
+      'description' => 'Test creating, editing, deleting customer profiles and how they interact with other components, like orders.',
       'group' => 'Drupal Commerce',
     );
   }
@@ -23,13 +33,13 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
   /**
    * Implementation of setUp().
    */
-  function setUp() {
+  public function setUp() {
     $modules = parent::setUpHelper('all');
     parent::setUp($modules);
 
     // User creation for different operations.
-    $this->store_admin = $this->createStoreAdmin();
-    $this->store_customer = $this->createStoreCustomer();
+    $this->storeAdmin = $this->createStoreAdmin();
+    $this->storeCustomer = $this->createStoreCustomer();
 
     // Set the default country to US.
     variable_set('site_default_country', 'US');
@@ -37,12 +47,16 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
 
   /**
    * Load a customer profile basing in field conditions.
+   *
+   * @param array $conditions
+   *   Query conditions.
+   *
+   * @return array
+   *   Customer profiles or empty array when query results are empty.
    */
-  protected function loadCustomerProfile($conditions) {
-    $query = db_select('commerce_customer_profile', 'cp');
+  protected function loadCustomerProfile(array $conditions) {
     $query = new EntityFieldQuery();
-    $query
-      ->entityCondition('entity_type', 'commerce_customer_profile', '=');
+    $query->entityCondition('entity_type', 'commerce_customer_profile');
 
     foreach ($conditions as $condition) {
       $operation = !empty($condition['operation']) ? $condition['operation'] : '=';
@@ -50,7 +64,7 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     }
 
     $results = $query->execute();
-    return $results['commerce_customer_profile'];
+    return empty($results['commerce_customer_profile']) ? array() : $results['commerce_customer_profile'];
   }
 
   /**
@@ -58,21 +72,28 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerUIAccessCustomerProfilesListing() {
     // Login with customer.
-    $this->drupalLogin($this->store_customer);
+    $this->drupalLogin($this->storeCustomer);
     // Check the access to the profiles listing.
     $this->drupalGet('admin/commerce/customer-profiles');
     $this->assertResponse(403, t('The store customer has no access to the administration listing of customer profiles'));
 
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
     // Check the access to the profiles listing.
     $this->drupalGet('admin/commerce/customer-profiles');
     $this->assertResponse(200, t('The store customer has access to the administration listing of customer profiles'));
 
     // Check the message of no profiles available.
-    $this->assertText(t('No customer profiles have been created yet.'), t('\'No customer profiles have been created yet\' message is displayed'));
+    $message = t('No customer profiles have been created yet.');
+    $this->assertText($message, t('"@message" message is displayed', array(
+      '@message' => $message,
+    )));
+
     // Check the add customer profile link.
-    $this->assertRaw(l('Add a customer profile', 'admin/commerce/customer-profiles/add'), t('\'Add a customer profile\' link is present in the page'));
+    $link = t('Add a customer profile');
+    $this->assertRaw(l($link, 'admin/commerce/customer-profiles/add'), t('"@link" link is present on the page', array(
+      '@link' => $link,
+    )));
   }
 
   /**
@@ -80,20 +101,19 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerUIAccessCustomerProfileTypesListing() {
     // Login with customer.
-    $this->drupalLogin($this->store_customer);
+    $this->drupalLogin($this->storeCustomer);
     // Check the access to the profile types listing.
     $this->drupalGet('admin/commerce/customer-profiles/types');
     $this->assertResponse(403, t('The store customer has no access to the administration listing of customer profile types'));
 
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
     // Check the access to the profile types listing.
     $this->drupalGet('admin/commerce/customer-profiles/types');
     $this->assertResponse(200, t('The store customer has access to the administration listing of customer profile types'));
 
     // Check if all the profiles defined by default are there.
-    $types = commerce_customer_profile_types();
-    foreach ($types as $type) {
+    foreach (commerce_customer_profile_types() as $type) {
       $this->assertText($type['name'], t('!type customer profile type is found in the listing', array('!type' => $type['name'])));
     }
   }
@@ -103,12 +123,12 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerUIAddCustomerProfile() {
     // Login with customer.
-    $this->drupalLogin($this->store_customer);
+    $this->drupalLogin($this->storeCustomer);
     // Check the access to the profile add page.
     $this->drupalGet('admin/commerce/customer-profiles/add');
 
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
     // Check the access to the profile add page.
     $this->drupalGet('admin/commerce/customer-profiles/add');
 
@@ -131,9 +151,20 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     $this->assertFieldByXPath("//input[starts-with(@id, 'edit-commerce-customer-address-und-0-name-line')]", NULL, t('Field !field exists in the customer profile form', array('!field' => 'Name line')));
 
     // Also check for the buttons and cancel link.
-    $this->assertFieldById('edit-submit', t('Save profile'), t('\'Save profile\' button is present'));
-    $this->assertFieldById('edit-save-continue', t('Save and add another'), t('\'Save an add another\' button is present'));
-    $this->assertRaw(l(t('Cancel'), 'admin/commerce/customer-profiles'), t('Cancel link is present'));
+    $button = t('Save profile');
+    $this->assertFieldById('edit-submit', $button, t('"@button" button is present', array(
+      '@button' => $button,
+    )));
+
+    $button = t('Save and add another');
+    $this->assertFieldById('edit-save-continue', $button, t('"@button" button is present', array(
+      '@button' => $button,
+    )));
+
+    $link = t('Cancel');
+    $this->assertRaw(l($link, 'admin/commerce/customer-profiles'), t('"@link" link is present', array(
+      '@link' => $link,
+    )));
 
     // Generate random information, as city, postal code, etc.
     $address_info = $this->generateAddressInformation();
@@ -141,10 +172,10 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     // Fill the profile information and Save.
     $info = array(
       'commerce_customer_address[und][0][name_line]' => $address_info['name_line'],
-    	'commerce_customer_address[und][0][thoroughfare]' => $address_info['thoroughfare'],
-    	'commerce_customer_address[und][0][locality]' => $address_info['locality'],
-    	'commerce_customer_address[und][0][administrative_area]' => $address_info['administrative_area'],
-    	'commerce_customer_address[und][0][postal_code]' => $address_info['postal_code'],
+      'commerce_customer_address[und][0][thoroughfare]' => $address_info['thoroughfare'],
+      'commerce_customer_address[und][0][locality]' => $address_info['locality'],
+      'commerce_customer_address[und][0][administrative_area]' => $address_info['administrative_area'],
+      'commerce_customer_address[und][0][postal_code]' => $address_info['postal_code'],
     );
     $this->drupalPost(NULL, $info, t('Save profile'));
 
@@ -153,8 +184,8 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     foreach ($address_info as $id => $element) {
       $conditions[] = array(
         'field' => 'commerce_customer_address',
-      	'column' => $id,
-      	'value' => $element,
+        'column' => $id,
+        'value' => $element,
       );
     }
     $profile = $this->loadCustomerProfile($conditions);
@@ -162,7 +193,12 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
 
     // Check the landing url and if the profile is in the listing.
     $this->assertTrue($this->url == url('admin/commerce/customer-profiles', array('absolute' => TRUE)), t('Landing page after save the profile is the profile listing page'));
-    $this->assertText(t('Profile saved'), t('\'Profile saved\' message is displayed after saving a customer profile'));
+
+    $message = t('Profile saved');
+    $this->assertText($message, t('"@message" message is displayed after saving a customer profile', array(
+      '@message' => $message,
+    )));
+
     $this->assertText($address_info['name_line'], t('Profile name line value: !value is present in the customer profile listing', array('!value' => $address_info['name_line'])));
   }
 
@@ -171,7 +207,7 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerUIAddCustomerProfileSaveAndAddAnother() {
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
     // Check the access to the profile add page.
     $this->drupalGet('admin/commerce/customer-profiles/add');
 
@@ -185,37 +221,41 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     // Fill the profile information and Save.
     $info = array(
       'commerce_customer_address[und][0][name_line]' => $address_info['name_line'],
-    	'commerce_customer_address[und][0][thoroughfare]' => $address_info['thoroughfare'],
-    	'commerce_customer_address[und][0][locality]' => $address_info['locality'],
-    	'commerce_customer_address[und][0][administrative_area]' => $address_info['administrative_area'],
-    	'commerce_customer_address[und][0][postal_code]' => $address_info['postal_code'],
+      'commerce_customer_address[und][0][thoroughfare]' => $address_info['thoroughfare'],
+      'commerce_customer_address[und][0][locality]' => $address_info['locality'],
+      'commerce_customer_address[und][0][administrative_area]' => $address_info['administrative_area'],
+      'commerce_customer_address[und][0][postal_code]' => $address_info['postal_code'],
     );
     $this->drupalPost(NULL, $info, t('Save and add another'));
 
     // Check the landing url and if the profile got created.
     $this->assertTrue($this->url == url('admin/commerce/customer-profiles/add/billing', array('absolute' => TRUE)), t('Landing page after save and add another for profiles is the profile creation page'));
-    $this->assertText(t('Profile saved'), t('\'Profile saved\' message is displayed after saving a customer profile'));
-    $this->assertFieldById('edit-commerce-customer-address-und-0-name-line', '', t('\'Name line\' field is present and empty'));
+
+    $message = t('Profile saved');
+    $this->assertText($message, t('"@message" message is displayed after saving a customer profile', array(
+      '@message' => $message,
+    )));
+
+    $this->assertFieldById('edit-commerce-customer-address-und-0-name-line', '', t('"Name line" field is present and empty'));
 
     $conditions = array();
     foreach ($address_info as $id => $element) {
       $conditions[] = array(
         'field' => 'commerce_customer_address',
-      	'column' => $id,
-      	'value' => $element,
+        'column' => $id,
+        'value' => $element,
       );
     }
     $profile = $this->loadCustomerProfile($conditions);
     $this->assertFalse(empty($profile), t('Profile has been created in database'));
   }
 
-
   /**
    * Add extra fields to a profile type.
    */
   public function testCommerceCustomerUIProfileWithExtraFields() {
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
     // Access to the profile billing type manage fields.
     $this->drupalGet('admin/commerce/customer-profiles/types/billing/fields');
     $this->assertResponse(200, t('Store admin user is able to access the customer profile type manage fields screen'));
@@ -235,15 +275,14 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     $this->drupalGet('admin/commerce/customer-profiles/add');
 
     // Assert that the field exists in the profile add form.
-
     $address_info = $this->generateAddressInformation();
     // Fill the profile information and Save.
     $info = array(
       'commerce_customer_address[und][0][name_line]' => $address_info['name_line'],
-    	'commerce_customer_address[und][0][thoroughfare]' => $address_info['thoroughfare'],
-    	'commerce_customer_address[und][0][locality]' => $address_info['locality'],
-    	'commerce_customer_address[und][0][administrative_area]' => $address_info['administrative_area'],
-    	'commerce_customer_address[und][0][postal_code]' => $address_info['postal_code'],
+      'commerce_customer_address[und][0][thoroughfare]' => $address_info['thoroughfare'],
+      'commerce_customer_address[und][0][locality]' => $address_info['locality'],
+      'commerce_customer_address[und][0][administrative_area]' => $address_info['administrative_area'],
+      'commerce_customer_address[und][0][postal_code]' => $address_info['postal_code'],
     );
 
     // Also add the new field value.
@@ -253,21 +292,36 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     $this->drupalPost(NULL, $info, t('Save profile'));
 
     // Check that the profile got created and if the field is filled.
-    $this->assertText(t('Profile saved'), t('\'Profile saved\' message is displayed after saving a customer profile'));
+    $message = t('Profile saved');
+    $this->assertText($message, t('"@message" message is displayed after saving a customer profile', array(
+      '@message' => $message,
+    )));
 
     // Check also in database.
+    $conditions = array();
     foreach ($address_info as $id => $element) {
       $conditions[] = array(
         'field' => 'commerce_customer_address',
-      	'column' => $id,
-      	'value' => $element,
+        'column' => $id,
+        'value' => $element,
       );
     }
 
     // Load the profile and check if the field is filled.
     $profiles = $this->loadCustomerProfile($conditions);
-    $profile = commerce_customer_profile_load(reset($profiles)->profile_id);
-    $this->assertTrue($profile->{'field_' . $edit['fields[_add_new_field][field_name]']}[LANGUAGE_NONE][0]['value'] == $field_value, t('The extra field !field created for the customer profile exists and it has the correct value: !value', array('!field' => $edit['fields[_add_new_field][field_name]'], '!value' => $field_value)));
+
+    if (empty($profiles)) {
+      $this->fail(t('Cannot load customer profile with conditions: !conditions', array(
+        '!conditions' => var_export($conditions, TRUE),
+      )));
+    }
+    else {
+      $profile = commerce_customer_profile_load(reset($profiles)->profile_id);
+      $this->assertTrue($profile->{'field_' . $edit['fields[_add_new_field][field_name]']}[LANGUAGE_NONE][0]['value'] == $field_value, t('The extra field !field created for the customer profile exists and it has the correct value: !value', array(
+        '!field' => $edit['fields[_add_new_field][field_name]'],
+        '!value' => $field_value,
+      )));
+    }
   }
 
   /**
@@ -275,11 +329,11 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerUIEditCustomerProfile() {
     // Create a new customer profile.
-    $profile = $this->createDummyCustomerProfile('billing', $this->store_customer->uid);
+    $profile = $this->createDummyCustomerProfile('billing', $this->storeCustomer->uid);
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
     // Edit the customer profile.
-    $this->drupalGet('admin/commerce/customer-profiles/'. $profile->profile_id .'/edit');
+    $this->drupalGet("admin/commerce/customer-profiles/$profile->profile_id/edit");
 
     $address = $profile->commerce_customer_address[LANGUAGE_NONE][0];
     // Check the integrity of the edit form.
@@ -288,8 +342,15 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     $this->assertFieldById('edit-commerce-customer-address-und-0-name-line', $address['name_line'], t('Field !field exists in the customer profile form and has the correct value !value', array('!field' => 'Name line', '!value' => $address['name_line'])));
 
     // Also check for the buttons and cancel link.
-    $this->assertFieldById('edit-submit', t('Save profile'), t('\'Save profile\' button is present'));
-    $this->assertRaw(l(t('Cancel'), 'admin/commerce/customer-profiles'), t('Cancel link is present'));
+    $button = t('Save profile');
+    $this->assertFieldById('edit-submit', $button, t('"@button" button is present', array(
+      '@button' => $button,
+    )));
+
+    $link = t('Cancel');
+    $this->assertRaw(l($link, 'admin/commerce/customer-profiles'), t('"@link" link is present', array(
+      '@link' => $link,
+    )));
 
     // Change some fields and save.
     $edit = array(
@@ -301,17 +362,37 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
 
     // Assert fields after saving the profile.
     $this->pass(t('Assert the field values after saving the profile form:'));
-    $this->assertTrue($this->url == url('admin/commerce/customer-profiles/'. $profile->profile_id .'/edit', array('absolute' => TRUE)), t('Landing page after save the profile is the profile edit page'));
-    $this->assertText(t('Profile saved'), t('\'Profile saved\' message is displayed after saving a customer profile'));
-    $this->assertFieldById('edit-commerce-customer-address-und-0-name-line', $edit['commerce_customer_address[und][0][name_line]'], t('Field !field exists in the customer profile form and has the correct value !value', array('!field' => 'Name line', '!value' => $edit['commerce_customer_address[und][0][name_line]'])));
-    $this->assertFieldById('edit-commerce-customer-address-und-0-locality', $edit['commerce_customer_address[und][0][locality]'], t('Field !field exists in the customer profile form and has the correct value !value', array('!field' => 'Locality', '!value' => $edit['commerce_customer_address[und][0][locality]'])));
+    $this->assertTrue($this->url == url("admin/commerce/customer-profiles/$profile->profile_id/edit", array('absolute' => TRUE)), t('Landing page after save the profile is the profile edit page'));
+
+    $message = t('Profile saved');
+    $this->assertText($message, t('"@message" message is displayed after saving a customer profile', array(
+      '@message' => $message,
+    )));
+
+    $this->assertFieldById('edit-commerce-customer-address-und-0-name-line', $edit['commerce_customer_address[und][0][name_line]'], t('Field !field exists in the customer profile form and has the correct value !value', array(
+      '!field' => 'Name line',
+      '!value' => $edit['commerce_customer_address[und][0][name_line]'],
+    )));
+
+    $this->assertFieldById('edit-commerce-customer-address-und-0-locality', $edit['commerce_customer_address[und][0][locality]'], t('Field !field exists in the customer profile form and has the correct value !value', array(
+      '!field' => 'Locality',
+      '!value' => $edit['commerce_customer_address[und][0][locality]'],
+    )));
+
     $this->assertFieldByName('name', NULL, t('Name field is present and empty'));
 
     // Check at database level.
     $profiles = commerce_customer_profile_load_multiple(array($profile->profile_id), array(), TRUE);
     $profile = reset($profiles);
-    $this->assertTrue($profile->commerce_customer_address[LANGUAGE_NONE][0]['name_line'] == $edit['commerce_customer_address[und][0][name_line]'], t('\'Name line\' field has been correctly modified in the customer profile'));
-    $this->assertTrue($profile->commerce_customer_address[LANGUAGE_NONE][0]['locality'] == $edit['commerce_customer_address[und][0][locality]'], t('\'Locality\' field has been correctly modified in the customer profile'));
+
+    $this->assertTrue($profile->commerce_customer_address[LANGUAGE_NONE][0]['name_line'] == $edit['commerce_customer_address[und][0][name_line]'], t('"@field" field has been correctly modified in the customer profile', array(
+      '@field' => 'Name line',
+    )));
+
+    $this->assertTrue($profile->commerce_customer_address[LANGUAGE_NONE][0]['locality'] == $edit['commerce_customer_address[und][0][locality]'], t('"@field" field has been correctly modified in the customer profile', array(
+      '@field' => 'Locality',
+    )));
+
     $this->assertTrue($profile->uid == 0, t('Profile owner is now anonymous user'));
   }
 
@@ -322,14 +403,18 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerUIDisableCustomerProfile() {
     // Create a new customer profile.
-    $profile = $this->createDummyCustomerProfile('billing', $this->store_customer->uid);
+    $profile = $this->createDummyCustomerProfile('billing', $this->storeCustomer->uid);
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
     // Edit the customer profile.
-    $this->drupalPost('admin/commerce/customer-profiles/'. $profile->profile_id .'/edit', array('status' => 0), t('Save profile'));
-
+    $this->drupalPost("admin/commerce/customer-profiles/$profile->profile_id/edit", array('status' => 0), t('Save profile'));
     $this->drupalGet('admin/commerce/customer-profiles');
-    $this->assertText(t('Disabled'), t('\'Disabled\' text for the profile appears in the profile listing page'));
+
+    $text = t('Disabled');
+    $this->assertText($text, t('"@text" text for the profile appears in the profile listing page', array(
+      '@text' => $text,
+    )));
+
     $profiles = commerce_customer_profile_load_multiple(array($profile->profile_id), array(), TRUE);
     $profile = reset($profiles);
     $this->assertTrue($profile->status == 0, t('Profile status is Disabled'));
@@ -340,17 +425,17 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerUIDeleteCustomerProfile() {
     // Create a new customer profile.
-    $profile = $this->createDummyCustomerProfile('billing', $this->store_customer->uid);
+    $profile = $this->createDummyCustomerProfile('billing', $this->storeCustomer->uid);
     // Login with customer.
-    $this->drupalLogin($this->store_customer);
+    $this->drupalLogin($this->storeCustomer);
     // Check the access to the profile delete.
-    $this->drupalGet('admin/commerce/customer-profiles/'. $profile->profile_id .'/delete');
+    $this->drupalGet("admin/commerce/customer-profiles/$profile->profile_id/delete");
     $this->assertResponse(403, t('Store customer is not able to access the admin deletion page for a customer profile'));
 
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
     // Check the access to the profile delete.
-    $this->drupalGet('admin/commerce/customer-profiles/'. $profile->profile_id .'/delete');
+    $this->drupalGet("admin/commerce/customer-profiles/$profile->profile_id/delete");
     $this->assertResponse(200, t('Store customer is able to access the admin deletion page for a customer profile'));
 
     // Check the integrity of the delete form.
@@ -366,12 +451,16 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     // Assert the landing page and confirmation messages.
     $this->assertTrue($this->url == url('admin/commerce/customer-profiles', array('absolute' => TRUE)), t('Landing page after deleting the profile is the profile listing page'));
     $this->assertText(t('The profile has been deleted'), t('Confirmation message after deleting the profile is displayed'));
-    $this->assertText(t('No customer profiles have been created yet.'), t('\'No customer profiles have been created yet\' message is displayed'));
+
+    $message = t('No customer profiles have been created yet.');
+    $this->assertText($message, t('"@message" message is displayed', array(
+      '@message' => $message,
+    )));
 
     // Check at database level.
     $profiles = commerce_customer_profile_load_multiple(array($profile->profile_id), array(), TRUE);
     $profile = reset($profiles);
-    $this->assertTrue(empty($profile), t('Profile can\'t be loaded from database after deleting it'));
+    $this->assertTrue(empty($profile), t('Profile cannot be loaded from database after deleting it'));
   }
 
   /**
@@ -379,27 +468,29 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerUIAddProfileViaCheckout() {
     // The rule that sends a mail after checkout completion should be disabled
-    //  as it returns an error caused by how mail messages are stored.
+    // as it returns an error caused by how mail messages are stored.
     $rules_config = rules_config_load('commerce_checkout_order_email');
     $rules_config->active = FALSE;
     $rules_config->save();
 
     // Create an order.
-    $order = $this->createDummyOrder($this->store_customer->uid);
+    $order = $this->createDummyOrder($this->storeCustomer->uid);
     // Login with customer.
-    $this->drupalLogin($this->store_customer);
+    $this->drupalLogin($this->storeCustomer);
     // Access checkout.
     $this->drupalGet($this->getCommerceUrl('checkout'));
 
     // Generate random information, as city, postal code, etc.
     $address_info = $this->generateAddressInformation();
 
-    // Fill in the billing address information
+    // Fill in the billing address information.
     $billing_pane = $this->xpath("//select[starts-with(@name, 'customer_profile_billing[commerce_customer_address]')]");
-    $this->drupalPostAJAX(NULL, array((string) $billing_pane[0]['name'] => 'US'), (string) $billing_pane[0]['name']);
+
+    $name = (string) $billing_pane[0]['name'];
+    $this->drupalPostAJAX(NULL, array($name => 'US'), $name);
 
     // Check if the country has been selected correctly, this uses XPath as the
-    //  ajax call replaces the element and the id may change
+    // ajax call replaces the element and the id may change.
     $this->assertFieldByXPath("//select[starts-with(@id, 'edit-customer-profile-billing-commerce-customer-address')]//option[@selected='selected']", 'US', t('Country selected'));
 
     // Fill in the required information for billing pane, with a random State.
@@ -412,25 +503,28 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     );
     $this->drupalPost(NULL, $info, t('Continue to next step'));
 
-    // Finish checkout process
+    // Finish checkout process.
     $this->drupalPost(NULL, array(), t('Continue to next step'));
 
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
 
     // Check the customer profile at database level.
     $orders = commerce_order_load_multiple(array($order->order_id), array(), TRUE);
-    $order = reset($orders);
-    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
-    $profile = $order_wrapper->commerce_customer_billing->value();
-    $profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $profile);
+    /* @var EntityDrupalWrapper $order_wrapper */
+    $order_wrapper = entity_metadata_wrapper('commerce_order', reset($orders));
+    /* @var EntityDrupalWrapper $profile_wrapper */
+    $profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $order_wrapper->commerce_customer_billing->value());
     $address = $profile_wrapper->commerce_customer_address->value();
 
     $this->assertTrue(array_intersect($address_info, $address) == $address_info, t('The address info for the checkout is stored in the customer profile'));
 
     // Check the customer profile in the listing.
     $this->drupalGet('admin/commerce/customer-profiles');
-    $this->assertTrue($address['name_line'], t('\'Name line\' text is present with the correct value: !value', array('!value' => $address['name_line'])));
+    $this->assertTrue($address['name_line'], t('"@text" text is present with the correct value: !value', array(
+      '@text' => 'Name line',
+      '!value' => $address['name_line'],
+    )));
   }
 
   /**
@@ -438,11 +532,11 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerUIAddProfileViaOrderUI() {
     // Create an order for store customer.
-    $order = $this->createDummyOrder($this->store_customer->uid, array(), 'pending');
+    $order = $this->createDummyOrder($this->storeCustomer->uid, array(), 'pending');
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
     // Access the order and fill customer profile information.
-    $this->drupalGet('admin/commerce/orders/' . $order->order_id . '/edit');
+    $this->drupalGet("admin/commerce/orders/$order->order_id/edit");
 
     $address_info = $this->generateAddressInformation();
 
@@ -452,33 +546,44 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     // Fill the profile information and Save.
     $info = array(
       'commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][name_line]' => $address_info['name_line'],
-    	'commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][thoroughfare]' => $address_info['thoroughfare'],
-    	'commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][locality]' => $address_info['locality'],
-    	'commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][administrative_area]' => $address_info['administrative_area'],
-    	'commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][postal_code]' => $address_info['postal_code'],
+      'commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][thoroughfare]' => $address_info['thoroughfare'],
+      'commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][locality]' => $address_info['locality'],
+      'commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][administrative_area]' => $address_info['administrative_area'],
+      'commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][postal_code]' => $address_info['postal_code'],
     );
     $this->drupalPost(NULL, $info, t('Save order'));
 
-    $this->assertText(t('Order saved'), t('\'Order saved\' message is displayed'));
+    $message = t('Order saved');
+    $this->assertText($message, t('"@message" message is displayed', array(
+      '@message' => $message,
+    )));
+
     // Check the customer profile in the listing.
     $this->drupalGet('admin/commerce/customer-profiles');
-    $this->assertTrue($address_info['name_line'], t('\'Name line\' text is present with the correct value: !value', array('!value' => $address_info['name_line'])));
+    $this->assertTrue($address_info['name_line'], t('"@text" text is present with the correct value: !value', array(
+      '@text' => 'Name line',
+      '!value' => $address_info['name_line'],
+    )));
 
     // Check the customer profile at database level.
     $conditions = array();
     foreach ($address_info as $id => $element) {
       $conditions[] = array(
         'field' => 'commerce_customer_address',
-      	'column' => $id,
-      	'value' => $element,
+        'column' => $id,
+        'value' => $element,
       );
     }
     $profiles = $this->loadCustomerProfile($conditions);
     $profile = commerce_customer_profile_load(reset($profiles)->profile_id);
+    /* @var EntityDrupalWrapper $profile_wrapper */
     $profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $profile);
     $this->assertFalse(empty($profile), t('Profile has been created in database'));
     foreach ($address_info as $name => $info) {
-      $this->assertEqual($profile_wrapper->commerce_customer_address->{$name}->value(), $info, t('!name is present in the profile with value !value', array('!name' => $name, '!value' => $info)));
+      $this->assertEqual($profile_wrapper->commerce_customer_address->{$name}->value(), $info, t('!name is present in the profile with value !value', array(
+        '!name' => $name,
+        '!value' => $info,
+      )));
     }
   }
 
@@ -487,30 +592,45 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerUIEditProfileViaOrderUI() {
     // Create a new customer profile.
-    $profile = $this->createDummyCustomerProfile('billing', $this->store_customer->uid);
+    $profile = $this->createDummyCustomerProfile('billing', $this->storeCustomer->uid);
     // Create an order for store customer.
-    $order = $this->createDummyOrder($this->store_customer->uid, array(), 'pending', $profile->profile_id);
+    $order = $this->createDummyOrder($this->storeCustomer->uid, array(), 'pending', $profile->profile_id);
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
 
     // Change some profile fields in the order and save.
     $edit = array(
       'commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][name_line]' => 'Example Name line',
       'commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][locality]' => 'Example Locality',
     );
-    $this->drupalPost('admin/commerce/orders/' . $order->order_id . '/edit', $edit, t('Save order'));
+    $this->drupalPost("admin/commerce/orders/$order->order_id/edit", $edit, t('Save order'));
 
-    $this->assertText(t('Order saved'), t('\'Order saved\' message is displayed'));
+    $message = t('Order saved');
+    $this->assertText($message, t('"@message" message is displayed', array(
+      '@message' => $message,
+    )));
+
     // Check the customer profile in the listing.
     $this->drupalGet('admin/commerce/customer-profiles');
-    $this->assertTrue($edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][name_line]'], t('\'Name line\' text is present with the correct value: !value', array('!value' => $edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][name_line]'])));
+    $this->assertTrue($edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][name_line]'], t('"@text" text is present with the correct value: !value', array(
+      '@text' => 'Name line',
+      '!value' => $edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][name_line]'],
+    )));
 
     // Check the customer profile at database level.
     $profiles = commerce_customer_profile_load_multiple(array($profile->profile_id), array(), TRUE);
-    $profile = reset($profiles);
-    $profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $profile);
-    $this->assertEqual($profile_wrapper->commerce_customer_address->name_line->value(), $edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][name_line]'], t('\'Name line\' property value !value match', array('!value' => $edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][name_line]'])));
-    $this->assertEqual($profile_wrapper->commerce_customer_address->locality->value(), $edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][locality]'], t('\'Locality\' property value !value match', array('!value' => $edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][locality]'])));
+    /* @var EntityDrupalWrapper $profile_wrapper */
+    $profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', reset($profiles));
+
+    $this->assertEqual($profile_wrapper->commerce_customer_address->name_line->value(), $edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][name_line]'], t('"@property" property value !value match', array(
+      '@property' => 'Name line',
+      '!value' => $edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][name_line]'],
+    )));
+
+    $this->assertEqual($profile_wrapper->commerce_customer_address->locality->value(), $edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][locality]'], t('"@property" property value !value match', array(
+      '@property' => 'Locality',
+      '!value' => $edit['commerce_customer_billing[und][profiles][0][commerce_customer_address][und][0][locality]'],
+    )));
   }
 
   /**
@@ -518,18 +638,21 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerUIDeleteProfileViaOrderUI() {
     // Create a new customer profile.
-    $profile = $this->createDummyCustomerProfile('billing', $this->store_customer->uid);
+    $profile = $this->createDummyCustomerProfile('billing', $this->storeCustomer->uid);
+    /* @var EntityDrupalWrapper $profile_wrapper */
     $profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $profile);
     // Create an order for store customer.
-    $order = $this->createDummyOrder($this->store_customer->uid, array(), 'pending', $profile->profile_id);
+    $order = $this->createDummyOrder($this->storeCustomer->uid, array(), 'pending', $profile->profile_id);
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
     // Access the order and check delete customer profile information.
-    $this->drupalPost('admin/commerce/orders/' . $order->order_id . '/edit', array('commerce_customer_billing[und][profiles][0][remove]' => 1), t('Save order'));
+    $this->drupalPost("admin/commerce/orders/$order->order_id/edit", array('commerce_customer_billing[und][profiles][0][remove]' => 1), t('Save order'));
 
     // Check the customer profile is not present in the listing.
     $this->drupalGet('admin/commerce/customer-profiles');
-    $this->assertNoText($profile_wrapper->commerce_customer_address->name_line->value(), t('\'Name line\' for the profile is not present in the customer profiles listing'));
+    $this->assertNoText($profile_wrapper->commerce_customer_address->name_line->value(), t('"@text" for the profile is not present in the customer profiles listing', array(
+      '@text' => 'Name line',
+    )));
 
     // Check the customer profile has been deleted at database level.
     $profiles = commerce_customer_profile_load_multiple(array($profile->profile_id), array(), TRUE);
@@ -542,9 +665,9 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
    */
   public function testCommerceCustomerDeleteProfilesWithOrderReference() {
     // Create 2 new customer profiles.
-    $profile_with_order = $this->createDummyCustomerProfile('billing', $this->store_customer->uid);
-    $this->createDummyOrder($this->store_customer->uid, array(), 'pending', $profile_with_order->profile_id);
-    $profile_without_order = $this->createDummyCustomerProfile('billing', $this->store_customer->uid);
+    $profile_with_order = $this->createDummyCustomerProfile('billing', $this->storeCustomer->uid);
+    $this->createDummyOrder($this->storeCustomer->uid, array(), 'pending', $profile_with_order->profile_id);
+    $profile_without_order = $this->createDummyCustomerProfile('billing', $this->storeCustomer->uid);
 
     $profile_ids = array($profile_with_order->profile_id, $profile_without_order->profile_id);
 
@@ -566,7 +689,7 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     module_enable(array('commerce_customer_profile_dummy_type'));
 
     // Login with store admin.
-    $this->drupalLogin($this->store_admin);
+    $this->drupalLogin($this->storeAdmin);
 
     // Check the customer profile types.
     $this->drupalGet('admin/commerce/customer-profiles/types');
@@ -581,7 +704,7 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     $this->assertText(t('Dummy profile type'), t('Dummy profile type is present as checkout pane'));
 
     // Create an order for store customer.
-    $order = $this->createDummyOrder($this->store_customer->uid, array(), 'pending');
+    $order = $this->createDummyOrder($this->storeCustomer->uid, array(), 'pending');
 
     // Check if the profile type is present.
     $this->drupalGet('admin/commerce/orders/' . $order->order_id . '/edit');
@@ -591,21 +714,7 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
   /**
    * Test the copying of one profile's fields to another (disabled by default).
    */
-  public function testCommerceCustomerUIProfileCopy() {
-    $this->_testCommerceCustomerUIProfileCopy();
-  }
-
-  /**
-   * Test the copying of one profile's fields to another (enabled by default).
-   */
-  public function testCommerceCustomerUIProfileCopyDefaultEnabled() {
-    $this->_testCommerceCustomerUIProfileCopy(TRUE);
-  }
-
-  /**
-   * Test the copying of one profile's fields to another.
-   */
-  public function _testCommerceCustomerUIProfileCopy($default_enabled = FALSE) {
+  public function testCommerceCustomerUIProfileCopy($default_enabled = FALSE) {
     // Enable the helper module that creates a new profile type.
     module_enable(array('commerce_customer_profile_dummy_type'));
 
@@ -616,19 +725,21 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     variable_set('commerce_customer_profile_dummy_profile_copy_default', $default_enabled);
 
     // Create an order.
-    $order = $this->createDummyOrder($this->store_customer->uid);
+    $order = $this->createDummyOrder($this->storeCustomer->uid);
     // Login with customer.
-    $this->drupalLogin($this->store_customer);
+    $this->drupalLogin($this->storeCustomer);
     // Access checkout.
     $this->drupalGet($this->getCommerceUrl('checkout'));
 
     // Generate random information, as city, postal code, etc.
     $address_info = $this->generateAddressInformation();
 
-    // Fill in the billing address information if the copying isn't enabled by default.
+    // Fill in the billing address information if the copying isn't
+    // enabled by default.
     if (!$default_enabled) {
       $billing_pane = $this->xpath("//select[starts-with(@name, 'customer_profile_billing[commerce_customer_address]')]");
-      $this->drupalPostAJAX(NULL, array((string) $billing_pane[0]['name'] => 'US'), (string) $billing_pane[0]['name']);
+      $name = (string) $billing_pane[0]['name'];
+      $this->drupalPostAJAX(NULL, array($name => 'US'), $name);
     }
 
     // Fill in the required information for billing pane, with a random State.
@@ -648,16 +759,21 @@ class CommerceCustomerUITest extends CommerceBaseTestCase {
     $order = reset($orders);
     $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
 
-    // Extract the address field value from the billing profile.
-    $profile = $order_wrapper->commerce_customer_billing->value();
-    $profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $profile);
-    $billing_address = $profile_wrapper->commerce_customer_address->value();
+    /* @var EntityDrupalWrapper $profile_wrapper */
+    $addresses = array();
+    foreach (array('billing', 'dummy') as $profile_type) {
+      $profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $order_wrapper->{"commerce_customer_$profile_type"}->value());
+      $addresses[$profile_type] = $profile_wrapper->commerce_customer_address->value();
+    }
 
-    // And extract the address field value from the dummy profile.
-    $profile = $order_wrapper->commerce_customer_dummy->value();
-    $profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $profile);
-    $dummy_address = $profile_wrapper->commerce_customer_address->value();
-
-    $this->assertTrue(array_intersect($billing_address, $dummy_address) == $billing_address, t('A billing information customer profile was successfully copied to a dummy customer profile during checkout.'));
+    $this->assertTrue(array_intersect($addresses['billing'], $addresses['dummy']) == $addresses['billing'], t('A billing information customer profile was successfully copied to a dummy customer profile during checkout.'));
   }
+
+  /**
+   * Test the copying of one profile's fields to another (enabled by default).
+   */
+  public function testCommerceCustomerUIProfileCopyDefaultEnabled() {
+    $this->testCommerceCustomerUIProfileCopy(TRUE);
+  }
+
 }
